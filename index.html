@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Table Tennis — Background Image Stretched</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root{
+      --playground-pink: #ffccda;
+      --paddle-purple: #7a3cff;
+      --ball-white: #ffffff;
+      --ui-bg: rgba(255,255,255,0.95);
+      --ui-text: #222;
+      --muted: #666;
+      --border: #e0e0e0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+
+    /* Page background set to the image and stretched to window */
+    body{
+      margin: 12px;
+      /* Background image from your link, stretched to cover the window */
+      background-image: url("https://share.google/SJoMAhxpQDCnXrJbX");
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      color: var(--ui-text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* Keep UI panels slightly opaque so the background shows through but UI remains readable */
+    .controls {
+      width: 860px;
+      max-width: calc(100% - 24px);
+      background: var(--ui-bg);
+      border: 1px solid var(--border);
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .left-controls, .right-controls { display:flex; gap:12px; align-items:center; }
+
+    label{ font-size: 14px; color: var(--muted); }
+    input[type="number"]{
+      width:80px;
+      padding:6px 8px;
+      border-radius:6px;
+      border:1px solid var(--border);
+      font-size:14px;
+      background: #fff;
+    }
+    .difficulty { display:flex; gap:8px; align-items:center; }
+    .difficulty input{ margin-right:6px; }
+    button { background: var(--paddle-purple); color: white; border: none; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    button[disabled]{ opacity: 0.5; cursor: not-allowed; }
+
+    .canvas-wrap{
+      width: 860px;
+      max-width: calc(100% - 24px);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.06); /* slight panel so canvas sits nicely on image */
+      display:flex;
+      justify-content:center;
+      padding:12px;
+      position: relative;
+    }
+
+    canvas{
+      background: var(--playground-pink);
+      display:block;
+      border-radius: 6px;
+      box-shadow: inset 0 -8px 18px rgba(0,0,0,0.02);
+      touch-action: none; /* capture touches */
+    }
+
+    /* Touch panel below canvas so it doesn't block the view */
+    .touch-panel {
+      width: 860px;
+      max-width: calc(100% - 24px);
+      display:flex;
+      justify-content:center;
+      gap: 18px;
+      margin-top: 8px;
+      margin-bottom: 6px;
+      align-items:center;
+    }
+    .touch-btn {
+      width: 74px;
+      height: 48px;
+      border-radius: 8px;
+      background: rgba(122,60,255,0.98);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      box-shadow: 0 6px 18px rgba(122,60,255,0.18);
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .touch-btn:active { transform: translateY(2px); }
+
+    .scores {
+      width: 860px;
+      max-width: calc(100% - 24px);
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: var(--ui-bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display:flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .score-box { font-size: 18px; font-weight:700; color:var(--muted); }
+    .status { font-size: 15px; color: var(--muted); }
+    .instructions{ font-size: 13px; color:var(--muted); }
+
+    @media (max-width:880px){
+      .controls, .canvas-wrap, .scores, .touch-panel { width: calc(100% - 24px); }
+    }
+  </style>
+</head>
+<body>
+  <div class="controls" role="region" aria-label="Game controls">
+    <div class="left-controls">
+      <div>
+        <div style="font-weight:700">Difficulty</div>
+        <div class="difficulty" role="radiogroup" aria-label="difficulty">
+          <label><input type="radio" name="difficulty" value="easy" checked> Easy</label>
+          <label><input type="radio" name="difficulty" value="medium"> Medium</label>
+          <label><input type="radio" name="difficulty" value="hard"> Hard</label>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-weight:700">Points to win</div>
+        <input id="pointsToWin" type="number" min="1" max="50" value="5" aria-label="Points to win">
+      </div>
+    </div>
+
+    <div class="right-controls">
+      <div class="instructions">Use ↑ / ↓ arrow keys, drag the left half of the canvas, or use the buttons below.</div>
+      <button id="startBtn">Start</button>
+      <button id="resetBtn" style="background:#ddd;color:#222;border:1px solid #ccc;">Reset</button>
+    </div>
+  </div>
+
+  <div class="canvas-wrap">
+    <canvas id="gameCanvas" width="800" height="480" aria-label="Table tennis game"></canvas>
+  </div>
+
+  <!-- Buttons placed below the play area so they don't block the view -->
+  <div class="touch-panel" aria-hidden="false">
+    <div class="touch-btn" id="touchUp">▲ Up</div>
+    <div class="touch-btn" id="touchDown">▼ Down</div>
+  </div>
+
+  <div class="scores" role="status" aria-live="polite">
+    <div class="score-box">Player: <span id="playerScore">0</span></div>
+    <div class="status" id="statusText">Ready — choose difficulty and points, then press Start</div>
+    <div class="score-box">Computer: <span id="computerScore">0</span></div>
+  </div>
+
+  <script>
+    // Pong (table tennis) single-file game (same logic as before).
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // UI
+    const startBtn = document.getElementById('startBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const playerScoreEl = document.getElementById('playerScore');
+    const computerScoreEl = document.getElementById('computerScore');
+    const statusText = document.getElementById('statusText');
+    const pointsToWinInput = document.getElementById('pointsToWin');
+
+    const touchUp = document.getElementById('touchUp');
+    const touchDown = document.getElementById('touchDown');
+
+    function getDifficulty() {
+      const sel = document.querySelector('input[name="difficulty"]:checked');
+      return sel ? sel.value : 'medium';
+    }
+
+    function getBaseSpeed() {
+      const d = getDifficulty();
+      if (d === 'easy') return 3;
+      if (d === 'medium') return 4.5;
+      return 6;
+    }
+
+    let playerScore = 0, computerScore = 0;
+    let pointsToWin = parseInt(pointsToWinInput.value) || 5;
+    let running = false, animationId = null;
+
+    const paddle = { width: 12, height: 110, speed: 8, x: 20, y: (canvas.height - 110) / 2, color: '#7a3cff' };
+    const comp =   { width: 12, height: 110, x: canvas.width - 20 - 12, y: (canvas.height - 110) / 2, color: '#7a3cff' };
+    const ball =   { r: 8, x: canvas.width / 2, y: canvas.height / 2, vx: 0, vy: 0, color: '#ffffff', stroke: '#7a3cff', speedMultiplier: 1.0 };
+
+    const keys = { ArrowUp: false, ArrowDown: false };
+
+    let audioCtx = null;
+    function ensureAudioContext() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{});
+      } catch(e) {
+        audioCtx = null;
+      }
+    }
+    function playPaddleHitSound() {
+      if (!audioCtx) return;
+      const now = audioCtx.currentTime;
+      const bufferSize = Math.floor(0.04 * audioCtx.sampleRate);
+      const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i=0;i<bufferSize;i++) data[i] = (Math.random()*2 - 1) * Math.exp(-i / (bufferSize * 0.02));
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.45, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      src.connect(gain).connect(audioCtx.destination);
+      src.start(now);
+      src.stop(now + 0.06);
+
+      const osc = audioCtx.createOscillator();
+      const og = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(520 + Math.random()*220, now);
+      og.gain.setValueAtTime(0.16, now);
+      og.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(og).connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    }
+
+    function resetBall(direction) {
+      ball.x = canvas.width / 2;
+      ball.y = canvas.height / 2;
+      const dir = direction || (Math.random() > 0.5 ? 1 : -1);
+      const base = getBaseSpeed();
+      ball.speedMultiplier = 1.0;
+      ball.vx = base * dir;
+      ball.vy = (Math.random() * 3 - 1.5);
+    }
+    function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+    function draw(ts) {
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+
+      // center dashed line
+      ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10,8]);
+      ctx.beginPath();
+      ctx.moveTo(canvas.width/2, 6);
+      ctx.lineTo(canvas.width/2, canvas.height - 6);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // paddles (fill + outline)
+      ctx.fillStyle = paddle.color;
+      ctx.strokeStyle = '#4b0fbf';
+      ctx.lineWidth = 2;
+      roundedRect(paddle.x, paddle.y, paddle.width, paddle.height, 6, true, true);
+
+      ctx.fillStyle = comp.color;
+      ctx.strokeStyle = '#4b0fbf';
+      roundedRect(comp.x, comp.y, comp.width, comp.height, 6, true, true);
+
+      // ball: white fill + purple stroke
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+      ctx.fillStyle = ball.color;
+      ctx.fill();
+      ctx.strokeStyle = ball.stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function roundedRect(x,y,w,h,r,fill,stroke){
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    function update() {
+      if (keys.ArrowUp) paddle.y -= paddle.speed;
+      if (keys.ArrowDown) paddle.y += paddle.speed;
+      paddle.y = clamp(paddle.y, 6, canvas.height - paddle.height - 6);
+
+      const difficulty = getDifficulty();
+      let factor = 0.07, maxSpeed = 7;
+      if (difficulty === 'easy') { factor = 0.03; maxSpeed = 4; }
+      else if (difficulty === 'medium') { factor = 0.07; maxSpeed = 6; }
+      else if (difficulty === 'hard') { factor = 0.14; maxSpeed = 10; }
+
+      const compCenter = comp.y + comp.height/2;
+      let targetY = ball.y;
+      if (difficulty === 'hard' && ball.vx > 0) {
+        const dist = comp.x - ball.x;
+        const time = dist / (ball.vx || 0.0001);
+        targetY = ball.y + ball.vy * Math.max(0, time);
+        while (targetY < 0 || targetY > canvas.height) {
+          if (targetY < 0) targetY = -targetY;
+          if (targetY > canvas.height) targetY = 2*canvas.height - targetY;
+        }
+      }
+      const diff = targetY - compCenter;
+      const move = clamp(diff * factor, -maxSpeed, maxSpeed);
+      comp.y += move;
+      comp.y = clamp(comp.y, 6, canvas.height - comp.height - 6);
+
+      ball.x += ball.vx * ball.speedMultiplier;
+      ball.y += ball.vy * ball.speedMultiplier;
+
+      if (ball.y - ball.r <= 0) { ball.y = ball.r + 1; ball.vy = -ball.vy; }
+      if (ball.y + ball.r >= canvas.height) { ball.y = canvas.height - ball.r - 1; ball.vy = -ball.vy; }
+
+      if (ball.x - ball.r <= paddle.x + paddle.width) {
+        if (ball.y >= paddle.y - 6 && ball.y <= paddle.y + paddle.height + 6) {
+          ball.x = paddle.x + paddle.width + ball.r + 1;
+          ball.vx = Math.abs(ball.vx);
+          const hitPos = (ball.y - (paddle.y + paddle.height/2)) / (paddle.height/2);
+          ball.vy = hitPos * 5;
+          ball.speedMultiplier *= 1.02;
+          playPaddleHitSound();
+        }
+      }
+
+      if (ball.x + ball.r >= comp.x) {
+        if (ball.y >= comp.y - 6 && ball.y <= comp.y + comp.height + 6) {
+          ball.x = comp.x - ball.r - 1;
+          ball.vx = -Math.abs(ball.vx);
+          const hitPos = (ball.y - (comp.y + comp.height/2)) / (comp.height/2);
+          ball.vy = hitPos * 5;
+          ball.speedMultiplier *= 1.02;
+          playPaddleHitSound();
+        }
+      }
+
+      if (ball.x < 0) {
+        computerScore++;
+        updateScores();
+        if (checkWin()) { stopGame(); return; }
+        resetBall(1);
+        pauseBrief();
+      } else if (ball.x > canvas.width) {
+        playerScore++;
+        updateScores();
+        if (checkWin()) { stopGame(); return; }
+        resetBall(-1);
+        pauseBrief();
+      }
+    }
+
+    let pausedUntil = 0;
+    function pauseBrief() { pausedUntil = performance.now() + 700; }
+
+    function loop(ts) {
+      if (!running) return;
+      if (ts < pausedUntil) {
+        draw(ts);
+        animationId = requestAnimationFrame(loop);
+        return;
+      }
+      update();
+      draw(ts);
+      animationId = requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      ensureAudioContext();
+      pointsToWin = Math.max(1, Math.min(50, parseInt(pointsToWinInput.value) || 5));
+      pointsToWinInput.disabled = true;
+      document.querySelectorAll('input[name="difficulty"]').forEach(i => i.disabled = true);
+      startBtn.disabled = true;
+
+      resetBall();
+      running = true;
+      pausedUntil = performance.now() + 300;
+      statusText.textContent = `Playing — first to ${pointsToWin} points.`;
+      draw(performance.now());
+      if (animationId) cancelAnimationFrame(animationId);
+      animationId = requestAnimationFrame(loop);
+    }
+
+    function stopGame() {
+      running = false;
+      if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+      pointsToWinInput.disabled = false;
+      document.querySelectorAll('input[name="difficulty"]').forEach(i => i.disabled = false);
+      startBtn.disabled = false;
+      if (playerScore > computerScore) statusText.textContent = `You win ${playerScore} — ${computerScore}! Press Reset to play again.`;
+      else statusText.textContent = `Computer wins ${computerScore} — ${playerScore}. Press Reset to try again.`;
+    }
+
+    function resetGame() {
+      playerScore = 0; computerScore = 0;
+      updateScores();
+      paddle.y = (canvas.height - paddle.height) / 2;
+      comp.y = (canvas.height - comp.height) / 2;
+      resetBall();
+      running = false;
+      if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+      pointsToWinInput.disabled = false;
+      document.querySelectorAll('input[name="difficulty"]').forEach(i => i.disabled = false);
+      startBtn.disabled = false;
+      statusText.textContent = 'Ready — choose difficulty and points, then press Start';
+      draw(performance.now());
+    }
+
+    function updateScores() {
+      playerScoreEl.textContent = playerScore;
+      computerScoreEl.textContent = computerScore;
+    }
+    function checkWin() { return playerScore >= pointsToWin || computerScore >= pointsToWin; }
+
+    // Input handlers
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { keys[e.key] = true; e.preventDefault(); }
+    });
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { keys[e.key] = false; e.preventDefault(); }
+    });
+
+    // touch/mouse drag on left half to move paddle
+    let isTouching = false, touchId = null;
+    function handlePointerDown(clientX, clientY, id) {
+      const rect = canvas.getBoundingClientRect();
+      const x = (clientX - rect.left) * (canvas.width / rect.width);
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
+      if (x < canvas.width / 2) {
+        isTouching = true;
+        touchId = id;
+        paddle.y = clamp(y - paddle.height/2, 6, canvas.height - paddle.height - 6);
+      }
+    }
+    function handlePointerMove(clientX, clientY, id) {
+      if (!isTouching || id !== touchId) return;
+      const rect = canvas.getBoundingClientRect();
+      const y = (clientY - rect.top) * (canvas.height / rect.height);
+      paddle.y = clamp(y - paddle.height/2, 6, canvas.height - paddle.height - 6);
+    }
+    function handlePointerUp(id) {
+      if (isTouching && id === touchId) { isTouching = false; touchId = null; }
+    }
+
+    canvas.addEventListener('touchstart', (ev) => {
+      ensureAudioContext();
+      for (let i=0;i<ev.changedTouches.length;i++) {
+        const t = ev.changedTouches[i];
+        handlePointerDown(t.clientX, t.clientY, t.identifier);
+      }
+      ev.preventDefault();
+    }, { passive:false });
+
+    canvas.addEventListener('touchmove', (ev) => {
+      for (let i=0;i<ev.changedTouches.length;i++) {
+        const t = ev.changedTouches[i];
+        handlePointerMove(t.clientX, t.clientY, t.identifier);
+      }
+      ev.preventDefault();
+    }, { passive:false });
+
+    canvas.addEventListener('touchend', (ev) => {
+      for (let i=0;i<ev.changedTouches.length;i++) {
+        const t = ev.changedTouches[i];
+        handlePointerUp(t.identifier);
+      }
+      ev.preventDefault();
+    }, { passive:false });
+
+    // mouse drag support
+    let mouseDown = false;
+    canvas.addEventListener('mousedown', (ev) => { ensureAudioContext(); mouseDown = true; handlePointerDown(ev.clientX, ev.clientY, 'mouse'); ev.preventDefault(); });
+    canvas.addEventListener('mousemove', (ev) => { if (mouseDown) handlePointerMove(ev.clientX, ev.clientY, 'mouse'); });
+    document.addEventListener('mouseup', (ev) => { if (mouseDown) { mouseDown = false; handlePointerUp('mouse'); } });
+
+    // buttons below canvas: hold to move
+    let holdInterval = null;
+    function startHold(dir) {
+      ensureAudioContext();
+      if (dir === 'up') paddle.y -= paddle.speed * 1.2; else paddle.y += paddle.speed * 1.2;
+      paddle.y = clamp(paddle.y, 6, canvas.height - paddle.height - 6);
+      if (holdInterval) clearInterval(holdInterval);
+      holdInterval = setInterval(() => {
+        if (dir === 'up') paddle.y -= paddle.speed * 1.2; else paddle.y += paddle.speed * 1.2;
+        paddle.y = clamp(paddle.y, 6, canvas.height - paddle.height - 6);
+      }, 80);
+    }
+    function stopHold() { if (holdInterval) { clearInterval(holdInterval); holdInterval = null; } }
+
+    touchUp.addEventListener('touchstart', (e) => { startHold('up'); e.preventDefault(); }, { passive:false });
+    touchUp.addEventListener('touchend', (e) => { stopHold(); e.preventDefault(); }, { passive:false });
+    touchDown.addEventListener('touchstart', (e) => { startHold('down'); e.preventDefault(); }, { passive:false });
+    touchDown.addEventListener('touchend', (e) => { stopHold(); e.preventDefault(); }, { passive:false });
+
+    touchUp.addEventListener('mousedown', (e) => { startHold('up'); e.preventDefault(); });
+    touchDown.addEventListener('mousedown', (e) => { startHold('down'); e.preventDefault(); });
+    document.addEventListener('mouseup', stopHold);
+
+    // Start / Reset
+    startBtn.addEventListener('click', () => {
+      ensureAudioContext();
+      try { if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); } catch(e){}
+      statusText.textContent = 'Starting...';
+      setTimeout(()=>{ if (!running) startGame(); }, 50);
+    });
+    resetBtn.addEventListener('click', resetGame);
+
+    // fit canvas visually
+    function fitCanvas() {
+      const wrap = canvas.parentElement;
+      const maxWidth = Math.min(860, wrap.clientWidth - 24);
+      const scale = Math.min(1, maxWidth / 800);
+      canvas.style.width = (800 * scale) + 'px';
+      canvas.style.height = (480 * scale) + 'px';
+    }
+    window.addEventListener('resize', fitCanvas);
+    fitCanvas();
+
+    // init
+    resetBall();
+    draw(performance.now());
+    updateScores();
+
+    // If the image URL is not a direct public image link (for example it requires sign-in),
+    // the browser won't load it. If you see no background, provide a direct image URL (ending with .jpg/.png)
+    // or upload it to a public image host and tell me the direct link.
+  </script>
+</body>
+</html>
